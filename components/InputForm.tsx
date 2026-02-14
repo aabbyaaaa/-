@@ -1,0 +1,124 @@
+import React, { useState } from 'react';
+import { PolishRequest } from '../types';
+import { Sparkles, Trash2 } from 'lucide-react';
+
+interface InputFormProps {
+  onSubmit: (data: PolishRequest) => void;
+  isLoading: boolean;
+}
+
+const InputForm: React.FC<InputFormProps> = ({ onSubmit, isLoading }) => {
+  const [sourceText, setSourceText] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerTitle, setCustomerTitle] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sourceText.trim()) return;
+    onSubmit({ sourceText, customerName, customerTitle });
+  };
+
+  const handleClear = () => {
+    setSourceText('');
+    setCustomerName('');
+    setCustomerTitle('');
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full flex flex-col">
+      <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+        <h2 className="font-semibold text-gray-800 flex items-center">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-2"></span>
+          原始輸入
+        </h2>
+        <button 
+          onClick={handleClear}
+          type="button"
+          className="text-xs text-gray-400 hover:text-red-500 flex items-center transition-colors"
+        >
+          <Trash2 className="w-3 h-3 mr-1" />
+          清空
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-5 flex-1 flex flex-col space-y-4">
+        {/* Customer Info Row */}
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <label htmlFor="customerName" className="block text-sm font-medium text-gray-700 mb-1">
+              客戶姓氏 (選填)
+            </label>
+            <input
+              type="text"
+              id="customerName"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="例如: 王"
+              className="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              disabled={isLoading}
+            />
+          </div>
+          <div className="flex-1">
+            <label htmlFor="customerTitle" className="block text-sm font-medium text-gray-700 mb-1">
+              稱謂 (選填)
+            </label>
+            <input
+              type="text"
+              id="customerTitle"
+              value={customerTitle}
+              onChange={(e) => setCustomerTitle(e.target.value)}
+              placeholder="例如: 經理 / 小姐"
+              className="w-full rounded-lg border-gray-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        {/* Text Area */}
+        <div className="flex-1 flex flex-col min-h-[200px]">
+          <label htmlFor="sourceText" className="block text-sm font-medium text-gray-700 mb-1">
+            技術回覆內容 (必填)
+          </label>
+          <textarea
+            id="sourceText"
+            value={sourceText}
+            onChange={(e) => setSourceText(e.target.value)}
+            placeholder="請貼上您要回覆的技術內容。例如：
+關於 ABC-1234 的問題，我們檢測後發現是電壓異常(240V)。建議更換保險絲，規格為 5A。"
+            className="flex-1 w-full rounded-lg border-gray-300 border px-4 py-3 text-sm leading-relaxed focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all placeholder:text-gray-300"
+            disabled={isLoading}
+            required
+          />
+        </div>
+
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={isLoading || !sourceText.trim()}
+          className={`w-full py-3 px-4 rounded-lg text-white font-medium flex items-center justify-center space-x-2 transition-all shadow-md hover:shadow-lg ${
+            isLoading || !sourceText.trim()
+              ? 'bg-gray-300 cursor-not-allowed shadow-none'
+              : 'bg-blue-600 hover:bg-blue-700 active:transform active:scale-[0.99]'
+          }`}
+        >
+          {isLoading ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>正在進行禮貌化轉換...</span>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5" />
+              <span>開始轉換</span>
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+};
+
+export default InputForm;
