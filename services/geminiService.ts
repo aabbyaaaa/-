@@ -1,51 +1,28 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { PolishRequest, PolishResponse, Tone } from "../types";
 
-// Export the model name so it can be displayed in the UI
-export const MODEL_NAME = 'gemini-3-flash-preview';
+// Using OpenRouter's model ID for Google's Flash model
+// Note: "gemini-3-flash" is not yet public on OpenRouter, using the latest 2.0 Flash which is the equivalent bleeding edge.
+export const MODEL_NAME = 'google/gemini-2.0-flash-001';
 
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-// Define the response schema strictly to ensure consistent JSON output
-const responseSchema: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    variants: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          tone: {
-            type: Type.STRING,
-            enum: [Tone.CONCISE, Tone.STANDARD, Tone.FORMAL],
-            description: "The tone of the response."
-          },
-          subject: {
-            type: Type.STRING,
-            description: "A professional email subject line suitable for this response."
-          },
-          content: {
-            type: Type.STRING,
-            description: "The complete polished response text including greeting, body (with proper formatting), and closing."
-          }
-        },
-        required: ["tone", "content"],
-        propertyOrdering: ["tone", "subject", "content"]
-      }
-    }
-  },
-  required: ["variants"]
-};
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 export const polishText = async (request: PolishRequest): Promise<PolishResponse> => {
   const { sourceText, customerName, customerTitle } = request;
+  
+  // 1. Get API Key at runtime (prevents app crash if key is missing during init)
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please check your Vercel Environment Variables.");
+  }
 
-  // Construct the prompt
+  // 2. Construct the prompt
   const greetingInstruction = (customerName || customerTitle)
     ? `Address the customer as "${customerName || ''}${customerTitle || ''}".`
     : `Use a generic professional greeting (e.g., "您好，感謝您的詢問").`;
 
+  // We explicitly include the JSON schema in the system prompt because
+  // OpenRouter/OpenAI format works best with explicit schema instructions in text
+  // when using response_format: { type: "json_object" }.
   const systemInstruction = `
     You are a specialized "Technical Customer Service Polishing Assistant". 
     Your goal is to take raw technical notes from engineers and convert them into polite, professional customer service replies in Traditional Chinese (繁體中文).
@@ -64,6 +41,28 @@ export const polishText = async (request: PolishRequest): Promise<PolishResponse
        - ${greetingInstruction}
        - Include the technical content (following the formatting rules above).
        - End with a polite closing (e.g., "如需補充資訊，歡迎告知").
+    
+    RESPONSE FORMAT:
+    You must output a strictly valid JSON object matching this structure:
+    {
+      "variants": [
+        {
+          "tone": "concise",
+          "subject": "Email Subject",
+          "content": "Full response content..."
+        },
+        {
+          "tone": "standard",
+          "subject": "Email Subject",
+          "content": "Full response content..."
+        },
+        {
+          "tone": "formal",
+          "subject": "Email Subject",
+          "content": "Full response content..."
+        }
+      ]
+    }
   `;
 
   const userPrompt = `
@@ -72,30 +71,47 @@ export const polishText = async (request: PolishRequest): Promise<PolishResponse
     ${sourceText}
     """
     
-    Please generate the 3 variants now.
+    Please generate the 3 variants now in JSON.
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: userPrompt,
-      config: {
-        systemInstruction: systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        temperature: 0.3, // Low temperature for consistency and adherence to facts
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://dogger-polisher.vercel.app", // OpenRouter recommendation
+        "X-Title": "Dogger Polisher", // OpenRouter recommendation
       },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: { type: "json_object" }, // Force JSON mode
+        temperature: 0.3,
+      }),
     });
 
-    const jsonText = response.text;
-    if (!jsonText) {
-      throw new Error("Empty response from Gemini");
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`OpenRouter API Error: ${response.status} - ${JSON.stringify(errorData)}`);
     }
 
-    return JSON.parse(jsonText) as PolishResponse;
+    const data = await response.json();
+    const contentString = data.choices[0]?.message?.content;
+
+    if (!contentString) {
+      throw new Error("Empty response from AI Provider");
+    }
+
+    // Parse the JSON string from the LLM
+    const parsed = JSON.parse(contentString) as PolishResponse;
+    return parsed;
 
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error("AI Service Error:", error);
     throw error;
   }
 };
